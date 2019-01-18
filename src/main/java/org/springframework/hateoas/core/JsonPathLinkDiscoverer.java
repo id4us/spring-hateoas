@@ -28,7 +28,6 @@ import java.util.stream.Collectors;
 import net.minidev.json.JSONArray;
 import org.springframework.hateoas.Link;
 import org.springframework.hateoas.LinkDiscoverer;
-import org.springframework.hateoas.MediaTypes;
 import org.springframework.http.MediaType;
 import org.springframework.util.Assert;
 import org.springframework.util.ReflectionUtils;
