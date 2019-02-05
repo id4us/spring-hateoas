@@ -29,6 +29,7 @@ import org.springframework.context.support.MessageSourceAccessor;
 import org.springframework.core.codec.StringDecoder;
 import org.springframework.hateoas.MediaTypes;
 import org.springframework.hateoas.config.EnableHypermediaSupport.HypermediaType;
+import org.springframework.hateoas.config.Hypermedia;
 import org.springframework.hateoas.core.DelegatingRelProvider;
 import org.springframework.hateoas.hal.CurieProvider;
 import org.springframework.hateoas.hal.HalConfiguration;
@@ -59,7 +60,7 @@ public class HypermediaWebFluxConfigurer implements WebFluxConfigurer, BeanFacto
 	private final CurieProvider curieProvider;
 	private final HalConfiguration halConfiguration;
 	private final HalFormsConfiguration halFormsConfiguration;
-	private final Collection<HypermediaType> hypermediaTypes;
+	private final Collection<Hypermedia> hypermediaTypes;
 
 	private BeanFactory beanFactory;
 	
@@ -95,50 +96,36 @@ public class HypermediaWebFluxConfigurer implements WebFluxConfigurer, BeanFacto
 
 		CodecConfigurer.CustomCodecs customCodecs = configurer.customCodecs();
 
-		if (this.hypermediaTypes.stream().anyMatch(HypermediaType::isHalBasedMediaType)) {
+		this.hypermediaTypes.forEach(hypermedia -> {
 
-			if (this.hypermediaTypes.contains(HypermediaType.HAL)) {
+			ObjectMapper objectMapper;
 
-				ObjectMapper halObjectMapper = createHalObjectMapper(this.mapper, this.curieProvider, this.relProvider,
+			if (hypermedia == HypermediaType.HAL) {
+
+				objectMapper = createHalObjectMapper(this.mapper, this.curieProvider, this.relProvider,
 					linkRelationMessageSource, this.halConfiguration);
 
-				customCodecs.encoder(
-					new Jackson2JsonEncoder(halObjectMapper, MediaTypes.HAL_JSON, MediaTypes.HAL_JSON_UTF8));
-				customCodecs.decoder(
-					new Jackson2JsonDecoder(halObjectMapper, MediaTypes.HAL_JSON, MediaTypes.HAL_JSON_UTF8));
-			}
+			} else if (hypermedia == HypermediaType.HAL_FORMS) {
 
-			if (this.hypermediaTypes.contains(HypermediaType.HAL_FORMS)) {
-
-				ObjectMapper halFormsObjectMapper = createHalFormsObjectMapper(this.mapper, this.curieProvider,
+				objectMapper = createHalFormsObjectMapper(this.mapper, this.curieProvider,
 					this.relProvider, linkRelationMessageSource, this.halFormsConfiguration);
 
-				customCodecs.encoder(
-					new Jackson2JsonEncoder(halFormsObjectMapper, MediaTypes.HAL_FORMS_JSON));
-				customCodecs.decoder(
-					new Jackson2JsonDecoder(halFormsObjectMapper, MediaTypes.HAL_FORMS_JSON));
+			} else if (hypermedia == HypermediaType.COLLECTION_JSON) {
+
+				objectMapper = createCollectionJsonObjectMapper(this.mapper, linkRelationMessageSource);
+
+			} else if (hypermedia == HypermediaType.UBER) {
+
+				objectMapper = createUberObjectMapper(this.mapper);
+
+			} else {
+
+				objectMapper = hypermedia.createObjectMapper(this.mapper);
 			}
-		}
 
-		if (this.hypermediaTypes.contains(HypermediaType.COLLECTION_JSON)) {
-
-			ObjectMapper collectionJsonObjectMapper = createCollectionJsonObjectMapper(this.mapper, linkRelationMessageSource);
-
-			customCodecs.encoder(
-				new Jackson2JsonEncoder(collectionJsonObjectMapper, MediaTypes.COLLECTION_JSON));
-			customCodecs.decoder(
-				new Jackson2JsonDecoder(collectionJsonObjectMapper, MediaTypes.COLLECTION_JSON));
-		}
-
-		if (this.hypermediaTypes.contains(HypermediaType.UBER)) {
-
-			ObjectMapper uberObjectMapper = createUberObjectMapper(this.mapper);
-
-			customCodecs.encoder(
-				new Jackson2JsonEncoder(uberObjectMapper, MediaTypes.UBER_JSON));
-			customCodecs.decoder(
-				new Jackson2JsonDecoder(uberObjectMapper, MediaTypes.UBER_JSON));
-		}
+			customCodecs.encoder(new Jackson2JsonEncoder(objectMapper, hypermedia.getMimeTypes()));
+			customCodecs.decoder(new Jackson2JsonDecoder(objectMapper, hypermedia.getMimeTypes()));
+		});
 
 		customCodecs.decoder(StringDecoder.allMimeTypes());
 

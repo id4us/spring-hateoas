@@ -15,12 +15,10 @@
  */
 package org.springframework.hateoas.config.mvc;
 
-import static org.springframework.hateoas.MediaTypes.*;
 import static org.springframework.hateoas.config.HypermediaObjectMapperCreator.*;
 
 import lombok.RequiredArgsConstructor;
 
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -31,6 +29,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.support.MessageSourceAccessor;
 import org.springframework.hateoas.ResourceSupport;
 import org.springframework.hateoas.config.EnableHypermediaSupport.HypermediaType;
+import org.springframework.hateoas.config.Hypermedia;
 import org.springframework.hateoas.core.DelegatingRelProvider;
 import org.springframework.hateoas.hal.CurieProvider;
 import org.springframework.hateoas.hal.HalConfiguration;
@@ -59,7 +58,7 @@ public class HypermediaWebMvcConfigurer implements WebMvcConfigurer, BeanFactory
 	private final CurieProvider curieProvider;
 	private final HalConfiguration halConfiguration;
 	private final HalFormsConfiguration halFormsConfiguration;
-	private final Collection<HypermediaType> hypermediaTypes;
+	private final Collection<Hypermedia> hypermediaTypes;
 
 	private BeanFactory beanFactory;
 
@@ -91,36 +90,36 @@ public class HypermediaWebMvcConfigurer implements WebMvcConfigurer, BeanFactory
 		MessageSourceAccessor linkRelationMessageSource = this.beanFactory.getBean(MESSAGE_SOURCE_BEAN_NAME,
 				MessageSourceAccessor.class);
 
-		if (this.hypermediaTypes.stream().anyMatch(HypermediaType::isHalBasedMediaType)) {
-			
-			if (this.hypermediaTypes.contains(HypermediaType.HAL)) {
+		this.hypermediaTypes.forEach(hypermedia -> {
 
-				converters.add(0, new TypeConstrainedMappingJackson2HttpMessageConverter(
-					ResourceSupport.class, Arrays.asList(HAL_JSON, HAL_JSON_UTF8),
-					createHalObjectMapper(this.mapper, this.curieProvider, this.relProvider, linkRelationMessageSource,
-						this.halConfiguration)));
+			ObjectMapper objectMapper;
+
+			if (hypermedia == HypermediaType.HAL) {
+
+				objectMapper = createHalObjectMapper(this.mapper, this.curieProvider, this.relProvider,
+					linkRelationMessageSource, this.halConfiguration);
+
+			} else if (hypermedia == HypermediaType.HAL_FORMS) {
+
+				objectMapper = createHalFormsObjectMapper(this.mapper, this.curieProvider, this.relProvider,
+					linkRelationMessageSource, this.halFormsConfiguration);
+
+			} else if (hypermedia == HypermediaType.COLLECTION_JSON) {
+
+				objectMapper = createCollectionJsonObjectMapper(this.mapper, linkRelationMessageSource);
+
+			} else if (hypermedia == HypermediaType.UBER) {
+
+				objectMapper = createUberObjectMapper(this.mapper);
+
+			} else {
+
+				objectMapper = hypermedia.createObjectMapper(this.mapper);
 			}
 
-			if (this.hypermediaTypes.contains(HypermediaType.HAL_FORMS)) {
-
-				converters.add(0, new TypeConstrainedMappingJackson2HttpMessageConverter(
-					ResourceSupport.class, Arrays.asList(HAL_FORMS_JSON),
-					createHalFormsObjectMapper(this.mapper, this.curieProvider, this.relProvider, linkRelationMessageSource,
-						this.halFormsConfiguration)));
-			}
-		}
-		
-		if (this.hypermediaTypes.contains(HypermediaType.COLLECTION_JSON)) {
-
 			converters.add(0, new TypeConstrainedMappingJackson2HttpMessageConverter(
-				ResourceSupport.class, Arrays.asList(COLLECTION_JSON),
-				createCollectionJsonObjectMapper(this.mapper, linkRelationMessageSource)));
-		}
+				ResourceSupport.class, hypermedia.getMediaTypes(), objectMapper));
 
-		if (this.hypermediaTypes.contains(HypermediaType.UBER)) {
-
-			converters.add(0, new TypeConstrainedMappingJackson2HttpMessageConverter(
-				ResourceSupport.class, Arrays.asList(UBER_JSON), createUberObjectMapper(this.mapper)));
-		}
+		});
 	}
 }

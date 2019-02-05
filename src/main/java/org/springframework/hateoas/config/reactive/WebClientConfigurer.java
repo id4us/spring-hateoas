@@ -31,14 +31,15 @@ import org.springframework.context.support.MessageSourceAccessor;
 import org.springframework.core.codec.Decoder;
 import org.springframework.core.codec.Encoder;
 import org.springframework.core.codec.StringDecoder;
-import org.springframework.hateoas.MediaTypes;
 import org.springframework.hateoas.config.EnableHypermediaSupport.HypermediaType;
+import org.springframework.hateoas.config.Hypermedia;
 import org.springframework.hateoas.core.DelegatingRelProvider;
 import org.springframework.hateoas.hal.CurieProvider;
 import org.springframework.hateoas.hal.HalConfiguration;
 import org.springframework.hateoas.hal.forms.HalFormsConfiguration;
 import org.springframework.http.codec.json.Jackson2JsonDecoder;
 import org.springframework.http.codec.json.Jackson2JsonEncoder;
+import org.springframework.util.MimeType;
 import org.springframework.web.reactive.function.client.ExchangeStrategies;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -61,7 +62,7 @@ public class WebClientConfigurer implements BeanFactoryAware {
 	private final CurieProvider curieProvider;
 	private final HalConfiguration halConfiguration;
 	private final HalFormsConfiguration halFormsConfiguration;
-	private final Collection<HypermediaType> hypermediaTypes;
+	private final Collection<Hypermedia> hypermediaTypes;
 
 	private BeanFactory beanFactory;
 	
@@ -82,43 +83,38 @@ public class WebClientConfigurer implements BeanFactoryAware {
 		List<Encoder<?>> encoders = new ArrayList<>();
 		List<Decoder<?>> decoders = new ArrayList<>();
 
-		if (this.hypermediaTypes.stream().anyMatch(HypermediaType::isHalBasedMediaType)) {
+		this.hypermediaTypes.forEach(hypermedia -> {
 
-			if (this.hypermediaTypes.contains(HypermediaType.HAL)) {
+			ObjectMapper objectMapper;
 
-				ObjectMapper halObjectMapper = createHalObjectMapper(this.mapper, this.curieProvider, this.relProvider,
+			if (hypermedia == HypermediaType.HAL) {
+
+				objectMapper = createHalObjectMapper(this.mapper, this.curieProvider, this.relProvider,
 					linkRelationMessageSource, this.halConfiguration);
 
-				encoders.add(new Jackson2JsonEncoder(halObjectMapper, MediaTypes.HAL_JSON, MediaTypes.HAL_JSON_UTF8));
-				decoders.add(new Jackson2JsonDecoder(halObjectMapper, MediaTypes.HAL_JSON, MediaTypes.HAL_JSON_UTF8));
+			} else if (hypermedia == HypermediaType.HAL_FORMS) {
+
+				objectMapper = createHalFormsObjectMapper(this.mapper, this.curieProvider, this.relProvider,
+					linkRelationMessageSource, this.halFormsConfiguration);
+
+			} else if (hypermedia == HypermediaType.COLLECTION_JSON) {
+
+				objectMapper = createCollectionJsonObjectMapper(this.mapper, linkRelationMessageSource);
+
+			} else if (hypermedia == HypermediaType.UBER) {
+
+				objectMapper = createUberObjectMapper(this.mapper);
+
+			} else {
+
+				objectMapper = hypermedia.createObjectMapper(this.mapper);
+
 			}
 
-			if (this.hypermediaTypes.contains(HypermediaType.HAL_FORMS)) {
-
-				ObjectMapper halFormsObjectMapper = createHalFormsObjectMapper(this.mapper, this.curieProvider,
-					this.relProvider, linkRelationMessageSource, this.halFormsConfiguration);
-
-				encoders.add(new Jackson2JsonEncoder(halFormsObjectMapper, MediaTypes.HAL_FORMS_JSON));
-				decoders.add(new Jackson2JsonDecoder(halFormsObjectMapper, MediaTypes.HAL_FORMS_JSON));
-			}
-		}
-
-		if (this.hypermediaTypes.contains(HypermediaType.COLLECTION_JSON)) {
-
-			ObjectMapper collectionJsonObjectMapper = createCollectionJsonObjectMapper(this.mapper, linkRelationMessageSource);
-
-			encoders.add(new Jackson2JsonEncoder(collectionJsonObjectMapper, MediaTypes.COLLECTION_JSON));
-			decoders.add(new Jackson2JsonDecoder(collectionJsonObjectMapper, MediaTypes.COLLECTION_JSON));
-		}
-
-		if (this.hypermediaTypes.contains(HypermediaType.UBER)) {
-
-			ObjectMapper uberObjectMapper = createUberObjectMapper(this.mapper);
-
-			encoders.add(new Jackson2JsonEncoder(uberObjectMapper, MediaTypes.UBER_JSON));
-			decoders.add(new Jackson2JsonDecoder(uberObjectMapper, MediaTypes.UBER_JSON));
-		}
-
+			encoders.add(new Jackson2JsonEncoder(objectMapper, hypermedia.getMediaTypes().toArray(new MimeType[]{})));
+			decoders.add(new Jackson2JsonDecoder(objectMapper, hypermedia.getMediaTypes().toArray(new MimeType[]{})));
+		});
+		
 		// Include ability to decode into a plain string
 		decoders.add(StringDecoder.allMimeTypes());
 
